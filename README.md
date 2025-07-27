@@ -29,17 +29,17 @@ Antes de empezar, asegúrate de tener instalados en tu máquina:
 
 ````
 
-rag-mm/
-├── app/
-│   ├── main.py            # Indexa el PDF y crea los chunks en Qdrant
-│   ├── search.py          # Script de consulta de top‑5 párrafos
-│   └── requirements.txt   # pymupdf, qdrant-client
-├── data/
-│   └── reglamento.pdf     # PDF montado en /app/reglamento.pdf
-├── Dockerfile             # Imagen base Python 3.10 slim
-├── docker-compose.yml     # Servicios: qdrant + app
-├── Makefile               # Atajos para build, shell, main, search, logs…
-└── README.md              # (Este archivo)
+   rag-mm/
+   ├── app/
+   │   ├── main.py            # Indexa el PDF y crea los chunks en Qdrant
+   │   ├── search.py          # Script de consulta de top‑5 párrafos
+   │   └── requirements.txt   # pymupdf, qdrant-client
+   ├── data/
+   │   └── reglamento.pdf     # PDF montado en /app/reglamento.pdf
+   ├── Dockerfile             # Imagen base Python 3.10 slim
+   ├── docker-compose.yml     # Servicios: qdrant + app
+   ├── Makefile               # Atajos para build, shell, main, search, logs…
+   └── README.md              # (Este archivo)
 
 ````
 

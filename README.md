@@ -6,54 +6,60 @@ Este repositorio agrupa los **trabajos** de la asignatura **Métodos Matemático
 
 ## 📁 Estructura del repositorio
 
-Cada trabajo se organiza en su propia carpeta numerada:
+Cada trabajo se organiza en su propia carpeta con un nombre **descriptivo** que refleje su contenido:
 
 ```
 metodos-matematicos/
-├─ trabajo-01/         ← Carpeta del Trabajo 01
+├─ clasificador_mnist/  ← Carpeta del trabajo “Clasificador MNIST”
 │   ├─ Dockerfile
 │   ├─ docker-compose.yml
-│   ├─ Makefile         ← Comandos básicos para usuarios no familiarizados con Docker
+│   ├─ Makefile         ← Atajos para usuarios no familiarizados con Docker
 │   ├─ src/            ← Código fuente (scripts, módulos)
 │   ├─ notebooks/      ← Notebooks Jupyter
 │   └─ README.md       ← Documentación específica del trabajo
-├─ trabajo-02/
+├─ regresion_lineal/    ← Carpeta del trabajo “Regresión Lineal”
 │   └─ …
 └─ README.md           ← Índice y guía general (este archivo)
 ```
 
-* **trabajo-XX/**: Carpeta del trabajo número XX.
+* **\<nombre\_del\_trabajo>/**: Carpeta con nombre claro y conciso.
 
   * **Dockerfile**: Imagen base y dependencias.
   * **docker-compose.yml**: Servicios necesarios (Jupyter, bases de datos, etc.).
-  * **Makefile**: Atajos `make` que simplifican la ejecución de comandos Docker y levantamiento del entorno, pensado para quienes no manejan Docker directamente.
-  * **src/**: Scripts y módulos Python u otros lenguajes.
-  * **notebooks/**: Análisis y visualizaciones en Jupyter.
-  * **README.md**: Instrucciones específicas (objetivo, instalación, ejemplos de uso).
+  * **Makefile**: Atajos `make` para simplificar el levantamiento del entorno.
+  * **src/**: Scripts y módulos de código.
+  * **notebooks/**: Exploraciones en Jupyter.
+  * **README.md**: Instrucciones específicas (objetivo, instalación, ejemplos).
 
 ---
 
 ## 🚀 Cómo entregar un trabajo
 
-1. Copiar la carpeta de un trabajo existente como plantilla o crear `trabajo-XX` desde cero.
-2. Añadir los archivos necesarios (`Dockerfile`, `docker-compose.yml`, `Makefile`, `src/`, `notebooks/`, etc.).
-3. Completar el `README.md` de la carpeta con:
+1. Copia una carpeta de trabajo existente como plantilla o crea una nueva con un nombre descriptivo, por ejemplo `clasificador_mnist/`.
+2. Añade los archivos necesarios (`Dockerfile`, `docker-compose.yml`, `Makefile`, `src/`, `notebooks/`, etc.).
+3. Completa el `README.md` de la carpeta con:
 
-   * **Descripción** del objetivo y alcance.
+   * **Título y descripción** del objetivo.
    * **Requisitos** previos (Docker, Python, etc.).
    * **Pasos de instalación** y ejecución.
    * **Ejemplos de comandos** (entrenamiento, evaluación, etc.).
-4. Guardar y commitear:
+4. Crea una rama nueva basada en `main` con el patrón `<nombre_del_trabajo>/<tu_usuario>`, por ejemplo:
 
    ```bash
-   git add trabajo-XX/
-   git commit -m "[ADD] trabajo-XX: Título breve"
+   git checkout -b clasificador_mnist/camiloGarcia
    ```
-5. Push al repositorio:
+5. Guarda y commitea en tu rama:
 
    ```bash
-   git push origin main
+   git add <nombre_del_trabajo>/
+   git commit -m "[ADD] <nombre_del_trabajo>: Descripción breve"
    ```
+6. Sube tu rama al repositorio remoto:
+
+   ```bash
+   git push origin <nombre_del_trabajo>/<tu_usuario>
+   ```
+7. Abre un **Pull Request (PR)** desde tu rama hacia `main` para revisión y merge.
 
 ---
 
@@ -61,14 +67,14 @@ metodos-matematicos/
 
 Para evitar conflictos de librerías entre trabajos, cada carpeta define:
 
-* **Dockerfile** con la imagen base (p.ej. `python:3.10`).
+* **Dockerfile** con la imagen base.
 * **docker-compose.yml** para orquestar servicios.
-* **Makefile** para simplificar el levantamiento del entorno y facilitar a usuarios no familiarizados con Docker.
+* **Makefile** para simplificar comandos Docker.
 
 Ejemplo de ejecución:
 
 ```bash
-cd metodos-matematicos/trabajo-01
+cd metodos-matematicos/clasificador_mnist
 make up
 ```
 
@@ -80,19 +86,22 @@ Luego accede a Jupyter Lab en `http://localhost:8888` (o al puerto configurado).
 
 ## 🛠 Buenas prácticas de Git
 
-* Trabaja siempre en la rama `main` para entregas finales.
-* Emplea mensajes de commit claros:
+* **No hacer push directo** a la rama `main`.
+* **Crea siempre** una rama nueva para tu trabajo siguiendo el patrón `<nombre_del_trabajo>/<tu_usuario>`.
+* Trabaja y commitea tus cambios solo en tu rama.
+* Abre un PR para integrar tus cambios a `main` una vez listos.
+* Usa mensajes de commit claros:
 
-  * `[ADD]`: nueva entrega o módulo.
+  * `[ADD]`: nuevo trabajo o módulo.
   * `[FIX]`: corrección de errores.
-  * `[IMP]`: mejoras o refactor.
-* Mantén un historial limpio; usa `git mv` si renombras carpetas.
+  * `[IMP]`: mejoras o refactorización.
+* Si renombras carpetas o ficheros, utiliza `git mv` para preservar historial.
 
 ---
 
 ## 🤝 Contribuciones y soporte
 
-Si detectas errores o tienes sugerencias:
+Si detectas errores o sugerencias:
 
 1. Abre un *issue* en GitHub.
 2. Propón un *pull request* siguiendo las buenas prácticas.

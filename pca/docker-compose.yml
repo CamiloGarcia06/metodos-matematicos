@@ -1,0 +1,15 @@
+services:
+  pca:
+    build: .
+    image: pca-app:latest
+    container_name: pca-app
+    environment:
+      IMG_PATH: ${IMG_PATH:-data/sample_image.png}
+      VARIANCE: ${VARIANCE:-0.95}
+      OUTPUT_DIR: ${OUTPUT_DIR:-output}
+      JPEG_QUALITY: ${JPEG_QUALITY:-85}
+    volumes:
+      - ./media:/app/media
+    ports:
+      - "8000:8000"
+    command: ["python", "-m", "uvicorn", "app.server:app", "--host", "0.0.0.0", "--port", "8000"]

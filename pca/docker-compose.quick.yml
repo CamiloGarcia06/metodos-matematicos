@@ -1,0 +1,10 @@
+version: "3.8"
+
+services:
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: pca-tunnel
+    command: ["tunnel", "--no-autoupdate", "--url", "http://pca:8000"]
+    depends_on:
+      - pca
+    restart: unless-stopped

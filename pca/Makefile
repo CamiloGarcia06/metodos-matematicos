@@ -2,6 +2,7 @@
 
 DC := docker compose
 FILE := docker-compose.yml
+OVERRIDE_TUNNEL := docker-compose.tunnel.yml
 SERVICE := pca
 PORT := 8000
 URL := http://localhost:$(PORT)
@@ -10,7 +11,7 @@ IMAGE := pca-app:latest
 # Atajos
 PY := $(DC) -f $(FILE) run --rm $(SERVICE) python
 
-.PHONY: all build start stop restart rebuild status open shell python ps logs logs-pca
+.PHONY: all build start stop restart rebuild status open shell python ps logs logs-pca tunnel-up tunnel-down quick-tunnel-up quick-tunnel-down quick-url
 
 all: start
 
@@ -70,6 +71,61 @@ rebuild:
 	$(DC) -f $(FILE) down --remove-orphans --volumes || true; \
 	$(DC) -f $(FILE) build --no-cache; \
 	$(MAKE) start
+
+# Exponer vía Cloudflare Tunnel (autenticado con token)
+# Requiere que CLOUDFLARE_TUNNEL_TOKEN esté exportado en el entorno
+# y que el túnel esté configurado en la UI de Cloudflare apuntando al servicio (hostname -> http://pca:8000)
+tunnel-up: start
+	@if [ -z "$$CLOUDFLARE_TUNNEL_TOKEN" ]; then \
+	  echo "❌ Falta CLOUDFLARE_TUNNEL_TOKEN en el entorno"; exit 1; \
+	fi; \
+	echo "🌐 Iniciando Cloudflare Tunnel..."; \
+	$(DC) -f $(FILE) -f $(OVERRIDE_TUNNEL) up -d cloudflared; \
+	echo "✅ Tunnel iniciado. Verifica en Cloudflare el subdominio asignado."
+
+# Detener Cloudflare Tunnel
+tunnel-down:
+	@echo "🛑 Deteniendo Cloudflare Tunnel..."; \
+	$(DC) -f $(FILE) -f $(OVERRIDE_TUNNEL) down; \
+	echo "✅ Tunnel detenido."
+
+# Quick Tunnel (subdominio aleatorio, no requiere cuenta/token). Útil para demos.
+quick-tunnel-up: start
+	@echo "🌐 Iniciando Cloudflare Quick Tunnel (subdominio aleatorio)..."; \
+	$(DC) -f $(FILE) -f docker-compose.quick.yml up -d cloudflared; \
+	echo "⏳ Obteniendo URL pública..."; \
+	url=""; tries=0; \
+	while [ -z "$$url" ] && [ $$tries -lt 30 ]; do \
+	  sleep 1; tries=$$((tries+1)); \
+	  url=$$($(DC) -f $(FILE) -f docker-compose.quick.yml logs --no-color cloudflared 2>/dev/null | grep -Eo 'https://[^ ]*trycloudflare.com' | tail -1); \
+	  if [ -z "$$url" ]; then \
+	    url=$$(docker logs pca-tunnel --since=30m 2>/dev/null | grep -Eo 'https://[^ ]*trycloudflare.com' | tail -1); \
+	  fi; \
+	done; \
+	if [ -n "$$url" ]; then \
+	  echo "🌍 URL pública: $$url"; \
+	else \
+	  echo "ℹ️  No se detectó la URL todavía. Ejecuta: make quick-url"; \
+	fi
+
+quick-tunnel-down:
+	@echo "🛑 Deteniendo Quick Tunnel..."; \
+	$(DC) -f $(FILE) -f docker-compose.quick.yml down; \
+	echo "✅ Quick Tunnel detenido."
+
+# Mostrar la URL pública del Quick Tunnel
+quick-url:
+	@echo "🔎 Consultando URL del Quick Tunnel..."; \
+	url=$$($(DC) -f $(FILE) -f docker-compose.quick.yml logs --no-color cloudflared 2>/dev/null | grep -Eo 'https://[^ ]*trycloudflare.com' | tail -1); \
+	if [ -z "$$url" ]; then \
+	  url=$$(docker logs pca-tunnel --since=60m 2>/dev/null | grep -Eo 'https://[^ ]*trycloudflare.com' | tail -1); \
+	fi; \
+	if [ -n "$$url" ]; then \
+	  echo "🌍 URL pública: $$url"; \
+	else \
+	  echo "❌ No se encontró URL en logs. Últimas líneas de cloudflared:"; \
+	  $(DC) -f $(FILE) -f docker-compose.quick.yml logs --no-color --tail=80 cloudflared || true; \
+	fi
 
 # Estado rápido (contenedor + HTTP)
 status:

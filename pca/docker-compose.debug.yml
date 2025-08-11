@@ -1,0 +1,28 @@
+services:
+  pca:
+    # Reutiliza la misma imagen
+    image: pca-app:latest
+    container_name: pca-app-debug
+    environment:
+      IMG_PATH: ${IMG_PATH:-data/sample_image.png}
+      VARIANCE: ${VARIANCE:-0.95}
+      OUTPUT_DIR: ${OUTPUT_DIR:-output}
+      JPEG_QUALITY: ${JPEG_QUALITY:-85}
+    volumes:
+      - ./app:/app/app
+      - ./templates:/app/templates
+      - ./static:/app/static
+      - ./media:/app/media
+    ports:
+      - "8000:8000"
+      - "5678:5678"
+    command: [
+      "python", "-m", "debugpy",
+      "--listen", "0.0.0.0:5678",
+      "--wait-for-client",
+      "-m", "uvicorn", "app.server:app",
+      "--host", "0.0.0.0",
+      "--port", "8000",
+      "--reload",
+      "--log-level", "debug"
+    ]

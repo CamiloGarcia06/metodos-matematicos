@@ -11,7 +11,7 @@ IMAGE := pca-app:latest
 # Atajos
 PY := $(DC) -f $(FILE) run --rm $(SERVICE) python
 
-.PHONY: all build start stop restart rebuild status open shell python ps logs logs-pca tunnel-up tunnel-down quick-tunnel-up quick-tunnel-down quick-url
+.PHONY: all build start stop restart rebuild status open shell python ps logs logs-pca tunnel-up tunnel-down quick-tunnel-up quick-tunnel-down quick-url debug debug-down
 
 all: start
 
@@ -162,3 +162,21 @@ logs-pca:
 
 # Alias
 ps: status
+
+# Modo debug: levanta con debugpy exponiendo el puerto 5678 y código montado
+debug:
+	@echo "🪲 Iniciando servicio en modo DEBUG (debugpy en 0.0.0.0:5678)..."; \
+	# Detener si hay servicio normal activo para liberar puertos\n; \
+	$(DC) -f $(FILE) down --remove-orphans >/dev/null 2>&1 || true; \
+	if ! docker image inspect $(IMAGE) >/dev/null 2>&1; then \
+	  echo "🔧 Imagen no encontrada, construyendo..."; \
+	  $(DC) -f $(FILE) build; \
+	else \
+	  echo "✅ Imagen existente: $(IMAGE)"; \
+	fi; \
+	$(DC) -f $(FILE) -f docker-compose.debug.yml up --remove-orphans | cat
+
+debug-down:
+	@echo "🛑 Deteniendo DEBUG y limpiando..."; \
+	$(DC) -f $(FILE) -f docker-compose.debug.yml down --remove-orphans; \
+	echo "✅ Debug detenido."

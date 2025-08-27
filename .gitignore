@@ -1,3 +1,16 @@
+# Sensitive and local data
+rag_web/ollama_data/
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+
+# OS files
+.DS_Store
 *.jpg
 *.png
 *.jpeg

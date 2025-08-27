@@ -24,9 +24,19 @@
       <section class="chat">
         <div id="messages" class="messages"></div>
         <form id="chatForm" class="chat-form">
+          <select id="rankMode">
+            <option value="modelo" selected>modelo</option>
+            <option value="propio">propio</option>
+          </select>
           <input id="prompt" type="text" placeholder="Escribe tu pregunta..." required>
           <button type="submit">Enviar</button>
         </form>
+        <div style="margin-top:8px; font-size:12px; color:#9ca3af;">
+          Modo embedding: <select id="embedMode">
+            <option value="modelo" selected>modelo</option>
+            <option value="propio">propio</option>
+          </select>
+        </div>
       </section>
     </div>
 

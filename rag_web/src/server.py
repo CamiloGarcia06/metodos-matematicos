@@ -12,6 +12,9 @@ import uuid
 from typing import List, Set
 import httpx
 import unicodedata
+import json
+from .local_rank import rank_qdrant_by_tfidf_cosine
+from .local_embed import embed_query_tfidf
 
 app = FastAPI(title="RAG Web API")
 
@@ -62,9 +65,12 @@ def _pattern_bonus(text: str, query: str) -> float:
     ]
     bonus = 0.0
     if any(k in t for k in keywords):
-        bonus += 0.6
+        bonus += 0.8
     # Números típicos (3.0 / 3,0)
     if re.search(r"\b3[\.,]0\b", t):
+        bonus += 0.8
+    # Texto en palabras (tres punto cero)
+    if "tres punto cero" in t or "tres con cero" in t:
         bonus += 0.6
     # Coincidencia de bigramas de la consulta
     qtoks = list(_tokens(q))
@@ -75,6 +81,73 @@ def _pattern_bonus(text: str, query: str) -> float:
                 bonus += 0.3
                 break
     return min(bonus, 1.2)
+
+
+def _is_strong_grade_match(text: str) -> bool:
+    t = _normalize(text)
+    has_number = bool(re.search(r"\b3[\.,]0\b", t)) or ("tres punto cero" in t or "tres con cero" in t)
+    has_keyword = any(k in t for k in ["calificacion", "calificación", "nota", "aprob", "aprobatoria", "aprobatorio"])
+    return has_number and has_keyword
+
+
+async def rerank_with_llm(query: str, passages: List[str], top_k: int) -> List[int]:
+    if not passages:
+        return []
+    model = os.environ.get("OLLAMA_RERANK_MODEL", "gpt-oss:latest")
+    ollama_host = os.environ.get("OLLAMA_HOST", "http://ollama:11434")
+
+    numbered = "\n".join([f"{i}. {p}" for i, p in enumerate(passages)])
+    prompt = (
+        "Eres un re-ranker. Dada la pregunta del usuario y una lista de pasajes, "
+        "devuelve un JSON con los pasajes más relevantes, en formato "
+        "[{\"index\": <int>, \"score\": <float>}], con índices 0-basados. "
+        "Incluye sólo índices presentes y puntúa en [0,1].\n\n"
+        f"Pregunta: {query}\n\n"
+        f"Pasajes:\n{numbered}\n\n"
+        f"Devuelve sólo JSON, sin texto adicional. Top {top_k}."
+    )
+
+    try:
+        async with httpx.AsyncClient(timeout=120) as client_http:
+            r = await client_http.post(
+                f"{ollama_host}/api/generate",
+                json={"model": model, "prompt": prompt, "stream": False},
+            )
+            r.raise_for_status()
+            data = r.json()
+            text = data.get("response", "")
+            # Extraer JSON
+            match = re.search(r"\[.*\]", text, re.DOTALL)
+            payload = json.loads(match.group(0) if match else text)
+            scored = [
+                (int(item.get("index", -1)), float(item.get("score", 0.0)))
+                for item in payload
+                if isinstance(item, dict) and isinstance(item.get("index", None), (int, float))
+            ]
+            scored = [(i, s) for (i, s) in scored if 0 <= i < len(passages)]
+            scored.sort(key=lambda x: x[1], reverse=True)
+            return [i for i, _ in scored[: top_k]]
+    except Exception:
+        return []
+
+
+def _is_heading(text: str) -> bool:
+    t = _normalize(text).strip()
+    if not t:
+        return True
+    # Muy corto o termina en ':' suele ser encabezado
+    if len(t) < 24 or t.endswith(":"):
+        return True
+    # Alto ratio de mayúsculas (en original) sugiere título
+    upper = sum(1 for ch in text if ch.isupper())
+    letters = sum(1 for ch in text if ch.isalpha())
+    if letters > 0 and upper / letters > 0.6:
+        return True
+    # Consta sólo de números romanos/una palabra
+    if re.match(r"^(i|v|x|l|c|d|m)+\.?$", t.replace(".", "")):
+        return True
+    tokens = _tokens(text)
+    return len(tokens) < 8
 
 
 @app.get("/")
@@ -169,15 +242,44 @@ async def search(req: SearchRequest):
         if txt in seen:
             continue
         seen.add(txt)
+        # Filtrar encabezados/secciones vacías o cortas
+        if _is_heading(txt):
+            continue
         tks = _tokens(txt)
         overlap = 0.0 if not q_tokens else len(q_tokens & tks) / max(1, len(q_tokens))
         patt = _pattern_bonus(txt, req.query)
         # Pesos: 0.6 embeddings + 0.25 token overlap + 0.15 patrón
         hybrid = 0.6 * _norm(float(h.score)) + 0.25 * overlap + 0.15 * patt
-        ranked.append({"text": txt, "score": float(h.score), "hybrid": hybrid})
+        strong = 1.0 if _is_strong_grade_match(txt) else 0.0
+        hybrid += 0.6 * strong
+        ranked.append({"text": txt, "score": float(h.score), "hybrid": hybrid, "strong": strong})
 
+    # Primer filtro por ranking híbrido, luego re-ranking con LLM si está disponible
     ranked.sort(key=lambda x: x["hybrid"], reverse=True)
-    return {"results": [{"score": r["score"], "text": r["text"]} for r in ranked[: max(1, min(req.limit, 20))]]}
+    prelim = ranked[: max(1, min(20, len(ranked)))]
+    # Forzar que pasajes con match fuerte queden en el tope
+    prelim.sort(key=lambda x: (x.get("strong", 0.0), x["hybrid"]), reverse=True)
+    prelim_texts = [r["text"] for r in prelim]
+    order = await rerank_with_llm(req.query, prelim_texts, top_k=max(1, min(req.limit, 20)))
+    if order:
+        picked = []
+        seen_idx = set()
+        for i in order:
+            if 0 <= i < len(prelim) and i not in seen_idx:
+                picked.append(prelim[i])
+                seen_idx.add(i)
+                if len(picked) >= req.limit:
+                    break
+        if len(picked) < req.limit:
+            for j, item in enumerate(prelim):
+                if j not in seen_idx:
+                    picked.append(item)
+                    if len(picked) >= req.limit:
+                        break
+        final = picked
+    else:
+        final = prelim[: max(1, min(req.limit, len(prelim)))]
+    return {"results": [{"score": r["score"], "text": r["text"]} for r in final]}
 
 
 class UploadResponse(BaseModel):
@@ -234,6 +336,8 @@ class ChatRequest(BaseModel):
     prompt: str
     limit: int = 5
     model: str | None = None
+    mode: str | None = None  # "modelo" | "propio"
+    embedMode: str | None = None  # "modelo" | "propio"
 
 
 @app.post("/api/chat")
@@ -242,8 +346,33 @@ async def api_chat(req: ChatRequest):
     if not client.collection_exists(COLLECTION_NAME):
         raise HTTPException(status_code=404, detail="Colección no encontrada. Sube un archivo o ejecuta /ingest.")
 
-    # Buscar contextos mediante embedding de la pregunta
-    q_vec = await embed_text(req.prompt)
+    # Modo propio de ranking: usar rankeo TF‑IDF + coseno desde local_rank
+    if (req.mode or "modelo").lower() == "propio":
+        ranked = rank_qdrant_by_tfidf_cosine(client, COLLECTION_NAME, req.prompt, top_k=max(1, min(req.limit, 10)))
+        answer_lines = []
+        for idx, (score, text) in enumerate(ranked, 1):
+            answer_lines.append(f"[{idx}] score={score:.4f}\n{text}")
+        answer = "\n\n".join(answer_lines) if ranked else "(sin resultados)"
+        return {"answer": answer, "contexts": [t for _, t in ranked]}
+
+    # Selección de embedding: modelo (Ollama) vs propio (TF‑IDF)
+    if (req.embedMode or "modelo").lower() == "propio":
+        # Construir embedding TF‑IDF de la consulta usando el corpus de Qdrant
+        resp = client.scroll(collection_name=COLLECTION_NAME, with_payload=True, limit=1_000_000)
+        points_list = resp.points if hasattr(resp, "points") else (resp[0] if isinstance(resp, tuple) else resp)
+        paragraphs = [pt.payload.get("text", "") for pt in points_list if pt.payload and pt.payload.get("text")]
+        q_vec = embed_query_tfidf(req.prompt, paragraphs)
+        # Búsqueda coseno manual: calcularemos similitud ya dentro del rank propio, así que aquí usaremos search aproximado con el vector TF‑IDF
+        # Como Qdrant tiene dimensión de embeddings del modelo por defecto, no coincide con TF‑IDF; por simplicidad haremos rankeo local completo cuando embed propio.
+        ranked = rank_qdrant_by_tfidf_cosine(client, COLLECTION_NAME, req.prompt, top_k=max(1, min(req.limit, 10)))
+        answer_lines = []
+        for idx, (score, text) in enumerate(ranked, 1):
+            answer_lines.append(f"[{idx}] score={score:.4f}\n{text}")
+        answer = "\n\n".join(answer_lines) if ranked else "(sin resultados)"
+        return {"answer": answer, "contexts": [t for _, t in ranked]}
+    else:
+        # Caso por defecto (modelo): buscar por embedding de la pregunta con Ollama
+        q_vec = await embed_text(req.prompt)
     raw_hits = client.search(collection_name=COLLECTION_NAME, query_vector=q_vec, limit=50, with_payload=True)
 
     # Re-ranking híbrido (embeddings + coincidencia + patrones de dominio)
@@ -260,13 +389,41 @@ async def api_chat(req: ChatRequest):
             if txt in seen:
                 continue
             seen.add(txt)
+            if _is_heading(txt):
+                continue
             tks = _tokens(txt)
             overlap = 0.0 if not q_tokens else len(q_tokens & tks) / max(1, len(q_tokens))
             patt = _pattern_bonus(txt, req.prompt)
             hybrid = 0.6 * _norm(float(h.score)) + 0.25 * overlap + 0.15 * patt
-            results.append({"text": txt, "score": float(h.score), "hybrid": hybrid})
+            strong = 1.0 if _is_strong_grade_match(txt) else 0.0
+            hybrid += 0.6 * strong
+            results.append({"text": txt, "score": float(h.score), "hybrid": hybrid, "strong": strong})
         results.sort(key=lambda x: x["hybrid"], reverse=True)
-        results = [{"score": r["score"], "text": r["text"]} for r in results[: max(1, min(req.limit, 10))]]
+        # Primer filtro
+        prelim = results[: max(1, min(20, len(results)))]
+        prelim.sort(key=lambda x: (x.get("strong", 0.0), x["hybrid"]), reverse=True)
+        prelim_texts = [r["text"] for r in prelim]
+        order = []
+        if (req.mode or "modelo").lower() == "modelo":
+            order = await rerank_with_llm(req.prompt, prelim_texts, top_k=max(1, min(req.limit, 10)))
+        if order:
+            picked = []
+            seen_idx = set()
+            for i in order:
+                if 0 <= i < len(prelim) and i not in seen_idx:
+                    picked.append(prelim[i])
+                    seen_idx.add(i)
+                    if len(picked) >= req.limit:
+                        break
+            if len(picked) < req.limit:
+                for j, item in enumerate(prelim):
+                    if j not in seen_idx:
+                        picked.append(item)
+                        if len(picked) >= req.limit:
+                            break
+            results = picked
+        else:
+            results = prelim[: max(1, min(req.limit, len(prelim)))]
 
     # Responder con el TOP N de párrafos más relacionados
     answer_lines = []

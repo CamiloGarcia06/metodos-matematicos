@@ -13,7 +13,7 @@ QDRANT_DATA ?= ./qdrant_data
 OLLAMA_EMBED_MODEL ?= nomic-embed-text
 EMBED_MODELS := nomic-embed-text bge-m3 all-minilm:latest
 
-.PHONY: all build up down restart rebuild status open shell python logs logs-app ollama-pull ollama-run ollama-ps model models-installed models-list models-menu models-rm models-prune models-du bootstrap ingest embed-model embed-list embed-menu embed-current embed-installed embed-installed-menu embed-installed-model
+.PHONY: all build up down restart rebuild status open shell python logs logs-app ollama-pull ollama-run ollama-ps model models-installed models-list models-menu models-rm models-prune models-du bootstrap ingest embed-model embed-list embed-menu embed-current embed-installed embed-installed-menu embed-installed-model refresh refresh-all
 
 all: up
 
@@ -198,6 +198,22 @@ embed-menu:
 embed-current:
 	@echo "📌 Embedding model actual:"; \
 	if [ -f .env ] && grep -q '^OLLAMA_EMBED_MODEL=' .env; then grep '^OLLAMA_EMBED_MODEL=' .env; else echo "(no definido en .env, por defecto: $(OLLAMA_EMBED_MODEL))"; fi
+
+# Rebuild y reinicio rápido del servicio de la app tras cambios en código/templates/static
+refresh:
+	@echo "🔄 Reconstruyendo imagen y reiniciando $(SERVICE)..."; \
+	$(DC) -f $(FILE) up -d --no-deps --build --force-recreate $(SERVICE); \
+	echo "⏳ Esperando API en $(URL)/ ..."; \
+	i=0; until curl -sSf -o /dev/null $(URL)/ || [ $$i -ge 60 ]; do i=$$((i+1)); printf "."; sleep 1; done; echo ""; \
+	if [ $$i -ge 60 ]; then echo "❌ La API no respondió a tiempo"; exit 1; else echo "✅ Servicio disponible en $(URL)"; fi
+
+# Rebuild y reinicio de todos los servicios (app/ollama/qdrant)
+refresh-all:
+	@echo "🔄 Reconstruyendo imágenes y reiniciando todos los servicios..."; \
+	$(DC) -f $(FILE) up -d --build --force-recreate; \
+	echo "⏳ Esperando API en $(URL)/ ..."; \
+	i=0; until curl -sSf -o /dev/null $(URL)/ || [ $$i -ge 60 ]; do i=$$((i+1)); printf "."; sleep 1; done; echo ""; \
+	if [ $$i -ge 60 ]; then echo "❌ La API no respondió a tiempo"; exit 1; else echo "✅ Servicios listos"; fi
 
 # Show models installed locally in Ollama
 embed-installed:

@@ -7,6 +7,7 @@ function appendMessage(role, text) {
   div.textContent = text;
   wrap.appendChild(div);
   wrap.scrollTop = wrap.scrollHeight;
+  return div;
 }
 
 el('#uploadForm').addEventListener('submit', async (e) => {
@@ -30,20 +31,35 @@ el('#chatForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const input = el('#prompt');
   const prompt = input.value.trim();
+  const mode = el('#rankMode').value;
+  const embedMode = el('#embedMode').value;
   if (!prompt) return;
   appendMessage('user', prompt);
+  const isRerankModelo = (mode === 'modelo');
+  let thinkingDiv = null;
+  if (isRerankModelo) {
+    thinkingDiv = appendMessage('bot', '⏳ Re‑rankeando con modelo...');
+  }
   input.value = '';
   try {
     const res = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt })
+      body: JSON.stringify({ prompt, mode, embedMode })
     });
     if (!res.ok) throw new Error(await res.text());
     const data = await res.json();
-    appendMessage('bot', data.answer || '(sin respuesta)');
+    if (thinkingDiv) {
+      thinkingDiv.textContent = data.answer || '(sin respuesta)';
+    } else {
+      appendMessage('bot', data.answer || '(sin respuesta)');
+    }
   } catch (err) {
-    appendMessage('bot', `Error: ${err}`);
+    if (thinkingDiv) {
+      thinkingDiv.textContent = `Error: ${err}`;
+    } else {
+      appendMessage('bot', `Error: ${err}`);
+    }
   }
 });
 

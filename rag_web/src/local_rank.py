@@ -6,14 +6,17 @@ from qdrant_client import QdrantClient
 
 
 def tokenize(text: str) -> List[str]:
+    """Tokenizar un texto en palabras minúsculas (\w+)."""
     return re.findall(r"\w+", text.lower())
 
 
 def build_vocab(paragraphs: List[str]) -> List[str]:
+    """Construir vocabulario único a partir de una lista de párrafos."""
     return sorted({w for p in paragraphs for w in tokenize(p)})
 
 
 def build_idf(paragraphs: List[str], vocab: List[str]) -> Dict[str, float]:
+    """Calcular IDF por término: log(N/df)."""
     N = len(paragraphs)
     df: Dict[str, int] = {w: 0 for w in vocab}
     for p in paragraphs:
@@ -25,6 +28,7 @@ def build_idf(paragraphs: List[str], vocab: List[str]) -> Dict[str, float]:
 
 
 def tf_vector(words: List[str]) -> Dict[str, int]:
+    """Vector de frecuencias (TF) para una lista de palabras."""
     tf: Dict[str, int] = {}
     for w in words:
         tf[w] = tf.get(w, 0) + 1
@@ -32,11 +36,13 @@ def tf_vector(words: List[str]) -> Dict[str, int]:
 
 
 def tfidf_vector(text: str, idf: Dict[str, float]) -> Dict[str, float]:
+    """Vector TF‑IDF esparso para un texto dado usando un diccionario de IDF."""
     tf = tf_vector(tokenize(text))
     return {w: tf.get(w, 0) * idf.get(w, 0.0) for w in idf.keys()}
 
 
 def cosine_similarity(vec_a: Dict[str, float], vec_b: Dict[str, float]) -> float:
+    """Similitud coseno entre dos vectores esparsos (diccionarios término→peso)."""
     # dot product over intersection
     dot = 0.0
     # iterate over smaller dict for speed
@@ -52,6 +58,10 @@ def cosine_similarity(vec_a: Dict[str, float], vec_b: Dict[str, float]) -> float
 
 
 def rank_paragraphs_by_tfidf_cosine(query: str, paragraphs: List[str], top_k: int = 5) -> List[Tuple[float, str]]:
+    """Rankear párrafos por similitud coseno TF‑IDF respecto a la consulta.
+
+    Retorna una lista [(score, texto)] ordenada descendentemente.
+    """
     if not paragraphs:
         return []
     vocab = build_vocab(paragraphs)
@@ -68,6 +78,7 @@ def rank_paragraphs_by_tfidf_cosine(query: str, paragraphs: List[str], top_k: in
 
 
 def fetch_paragraphs_from_qdrant(client: QdrantClient, collection_name: str, limit: int = 1_000_000) -> List[str]:
+    """Leer todos los párrafos (payload.text) de una colección en Qdrant."""
     resp = client.scroll(collection_name=collection_name, with_payload=True, limit=limit)
     if hasattr(resp, "points"):
         points_list = resp.points
@@ -79,6 +90,7 @@ def fetch_paragraphs_from_qdrant(client: QdrantClient, collection_name: str, lim
 
 
 def rank_qdrant_by_tfidf_cosine(client: QdrantClient, collection_name: str, query: str, top_k: int = 5) -> List[Tuple[float, str]]:
+    """Conveniencia: obtener párrafos de Qdrant y rankearlos con TF‑IDF coseno."""
     paragraphs = fetch_paragraphs_from_qdrant(client, collection_name)
     return rank_paragraphs_by_tfidf_cosine(query, paragraphs, top_k=top_k)
 

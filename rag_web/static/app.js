@@ -35,10 +35,10 @@ el('#chatForm').addEventListener('submit', async (e) => {
   const embedMode = el('#embedMode').value;
   if (!prompt) return;
   appendMessage('user', prompt);
-  const isRerankModelo = (mode === 'modelo');
+  const isRerankModelo = (mode === 'modelo' || mode === 'open IA');
   let thinkingDiv = null;
   if (isRerankModelo) {
-    thinkingDiv = appendMessage('bot', '⏳ Re‑rankeando con modelo...');
+    thinkingDiv = appendMessage('bot', '⏳ Re‑rankeando...');
   }
   input.value = '';
   try {

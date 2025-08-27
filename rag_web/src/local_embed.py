@@ -36,8 +36,10 @@ def _tfidf_vector(text: str, idf: Dict[str, float]) -> List[float]:
 
 
 def embed_paragraphs_tfidf(paragraphs: List[str]) -> List[List[float]]:
-    """Compute TF‑IDF vectors for all paragraphs.
-    Returns the matrix of vectors. The vocabulary order is internal to IDF dict.
+    """Calcular embeddings TF‑IDF para todos los párrafos.
+
+    Retorna la matriz de vectores (uno por párrafo). El orden del vocabulario
+    es el del diccionario IDF construido internamente.
     """
     if not paragraphs:
         return []
@@ -47,7 +49,7 @@ def embed_paragraphs_tfidf(paragraphs: List[str]) -> List[List[float]]:
 
 
 def embed_query_tfidf(query: str, paragraphs: List[str]) -> List[float]:
-    """Compute TF‑IDF vector for a query using IDF built from the same paragraphs."""
+    """Calcular el vector TF‑IDF para una consulta usando IDF del mismo corpus."""
     if not paragraphs:
         return []
     vocab = _build_vocab(paragraphs)
